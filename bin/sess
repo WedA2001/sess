@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+import os, re, sys, time
+from pathlib import Path
+
+HELP = r"""
+sess — minimal session manager (MSF-style)
+
+USAGE:
+  sess new                create new session (uses $ip)
+  sess list               list sessions (sessions -l)
+  sess cd <sXX>           jump to session directory
+
+REQUIRED ENV:
+  ip                      target IP (set via: t <IP>)
+
+OPTIONAL ENV (per session):
+  SUSER                   user context (daemon, www-data, SYSTEM)
+  SVEC                    entry vector (apache_rce, smb_psexec, winrm)
+  SPHASE                  phase tag (foothold, privesc, proof)
+  SNOTE                   short note (free text)
+  SSTAB                   stability tag
+  SPORT                   listener port (default: 4444)
+
+DEFAULTS:
+  SROOT   ~/sessions
+  SPORT   4444
+
+ZSH SHORTCUTS (PRIMARY INTERFACE)
+================================
+
+Target
+------
+  t <IP>
+
+Phase / Note
+------------
+  ph <foothold|privesc|proof>
+  note "<text>"
+
+Session create
+--------------
+  s <user> <vector> ["note text"]   # note is optional
+  example:
+    ph foothold
+    s daemon apache_rce "cgi enabled"
+    note "cleanup /tmp/x"
+    ph privesc
+    s root lpe
+
+Session list
+------------
+  sls
+
+Session jump
+------------
+  scd <sXX>
+
+Listener
+--------
+  listen [port]
+
+Typical Flow
+============
+  t <IP>
+  ph foothold
+  s <user> <vector> ["note"]
+  listen
+""".strip()
+
+
+
+def getenv(name, default=""):
+    return os.environ.get(name, default)
+
+def next_sid(root: Path) -> str:
+    max_n = 0
+    for p in root.glob("s*_*"):
+        m = re.match(r"^s(\d+)_", p.name)
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    return f"s{max_n+1:02d}"
+
+def safe(s: str) -> str:
+    s = (s or "").strip()
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"[^A-Za-z0-9._:-]+", "", s)
+    return s[:40] if s else ""
+
+def write_file(path: Path, content: str):
+    path.write_text(content, encoding="utf-8")
+
+def cmd_new():
+    sroot = Path(os.path.expanduser(getenv("SROOT", "~/sessions")))
+    sroot.mkdir(parents=True, exist_ok=True)
+
+    ip = getenv("ip") or getenv("IP")
+    if not ip:
+        print("[!] env var 'ip' is not set")
+        sys.exit(2)
+
+    sid = next_sid(sroot)
+    user = safe(getenv("SUSER", "unknown"))
+    vec  = safe(getenv("SVEC",  "unknown"))
+    note = safe(getenv("SNOTE", ""))
+    phase = safe(getenv("SPHASE", ""))
+
+    parts = [sid, ip, user, vec]
+    if phase:
+        parts.append(phase)
+    if note:
+        parts.append(note)
+    dname = "_".join(parts)
+    sdir = sroot / dname
+    sdir.mkdir()
+
+    (sdir / "loot").mkdir()
+    (sdir / "screens").mkdir()
+
+    meta = [
+        f"SID: {sid}",
+        f"IP: {ip}",
+        f"User: {getenv('SUSER','')}",
+        f"Vector: {getenv('SVEC','')}",
+        f"Stability: {getenv('SSTAB','')}",
+        f"LHOST: {getenv('SLHOST','')}",
+        f"LPORT: {getenv('SPORT','4444')}",
+        f"Phase: {getenv('SPHASE','')}",
+        f"Note: {getenv('SNOTE','')}",  
+      
+        f"Created: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "Notes:",
+    ]
+    write_file(sdir / "meta.txt", "\n".join(meta))
+    write_file(sdir / "enum.txt", "")
+    write_file(sdir / "todo.txt", "- [ ] confirm priv\n- [ ] local enum\n- [ ] creds hunt\n")
+    write_file(sdir / "proof.txt", "")
+
+    idx = sroot / "index.txt"
+    line = f"{sid} | {ip} | {getenv('SUSER','')} | {getenv('SVEC','')} | {getenv('SPHASE','')} | {getenv('SNOTE','')} | {getenv('SSTAB','')}\n"
+    existing = idx.read_text(encoding="utf-8") if idx.exists() else ""
+    idx.write_text(existing + line, encoding="utf-8")
+
+    print(f'export SID="{sid}"')
+    print(f'export SDIR="{sdir}"')
+    print(f'cd "{sdir}"')
+
+def cmd_list():
+    sroot = Path(os.path.expanduser(getenv("SROOT", "~/sessions")))
+    idx = sroot / "index.txt"
+    print(idx.read_text(encoding="utf-8").rstrip() if idx.exists() else "[!] no index.txt yet")
+
+def cmd_cd(sid: str):
+    sroot = Path(os.path.expanduser(getenv("SROOT", "~/sessions")))
+    matches = sorted(sroot.glob(f"{sid}_*"))
+    if not matches:
+        print(f"[!] not found: {sid}")
+        sys.exit(1)
+    sdir = matches[-1]
+    print(f'export SID="{sid}"')
+    print(f'export SDIR="{sdir}"')
+    print(f'cd "{sdir}"')
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help", "help"):
+        print(HELP)
+        return
+
+    cmd = sys.argv[1].lower()
+    if cmd == "new":
+        cmd_new()
+    elif cmd == "list":
+        cmd_list()
+    elif cmd == "cd" and len(sys.argv) == 3:
+        cmd_cd(sys.argv[2])
+    else:
+        print(HELP)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
