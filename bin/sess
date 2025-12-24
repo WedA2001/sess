@@ -91,6 +91,23 @@ def safe(s: str) -> str:
 def write_file(path: Path, content: str):
     path.write_text(content, encoding="utf-8")
 
+def update_index(idx: Path, sid: str, new_line: str):
+    lines = []
+    if idx.exists():
+        lines = idx.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    updated = False
+    for i, l in enumerate(lines):
+        if l.startswith(f"{sid} |"):
+            lines[i] = new_line
+            updated = True
+            break
+
+    if not updated:
+        lines.append(new_line)
+
+    idx.write_text("".join(lines), encoding="utf-8")
+
 def cmd_new():
     sroot = Path(os.path.expanduser(getenv("SROOT", "~/sessions")))
     sroot.mkdir(parents=True, exist_ok=True)
@@ -145,12 +162,16 @@ def cmd_new():
     write_file(sdir / "proof.txt", "")
 
     idx = sroot / "index.txt"
-    line = (
-        f"{sid} | {ip} | {getenv('BOX','')} | {getenv('SUSER','')} | {getenv('SVEC','')} | "
+    # If SID already exists in env (meaning “update current session”), overwrite its line.
+    # Otherwise, use new sid line.
+    active_sid = getenv("SID", "")
+    sid_for_index = active_sid if active_sid else sid
+
+    new_line = (
+        f"{sid_for_index} | {ip} | {getenv('BOX','')} | {getenv('SUSER','')} | {getenv('SVEC','')} | "
         f"{getenv('SPHASE','')} | {getenv('SNOTE','')} | {getenv('SSTAB','')}\n"
     )
-    existing = idx.read_text(encoding="utf-8") if idx.exists() else ""
-    idx.write_text(existing + line, encoding="utf-8")
+    update_index(idx, sid_for_index, new_line)
 
     print(f'export SID="{sid}"')
     print(f'export SDIR="{sdir}"')
