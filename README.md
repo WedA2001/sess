@@ -4,7 +4,7 @@ Quick OSCP session manager (MSF-style) without MSF.
 
 ## Install
 ```bash
-git clone <your-repo>
+git clone https://github.com/WedA2001/sess.git
 cd sesskit
 chmod +x setup.sh
 ./setup.sh
