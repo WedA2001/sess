@@ -14,6 +14,7 @@ REQUIRED ENV:
   ip                      target IP (set via: t <IP>)
 
 OPTIONAL ENV (per session):
+  BOX                     machine name (WEB18, BRUTE2, etc.)
   SUSER                   user context (daemon, www-data, SYSTEM)
   SVEC                    entry vector (apache_rce, smb_psexec, winrm)
   SPHASE                  phase tag (foothold, privesc, proof)
@@ -32,8 +33,9 @@ Target
 ------
   t <IP>
 
-Phase / Note
-------------
+Box / Phase / Note
+------------------
+  box <NAME>
   ph <foothold|privesc|proof>
   note "<text>"
 
@@ -41,11 +43,11 @@ Session create
 --------------
   s <user> <vector> ["note text"]   # note is optional
   example:
+    t 192.168.222.202
+    box WEB18
     ph foothold
     s daemon apache_rce "cgi enabled"
-    note "cleanup /tmp/x"
-    ph privesc
-    s root lpe
+    listen
 
 Session list
 ------------
@@ -62,11 +64,11 @@ Listener
 Typical Flow
 ============
   t <IP>
+  box <NAME>
   ph foothold
   s <user> <vector> ["note"]
   listen
 """.strip()
-
 
 
 def getenv(name, default=""):
@@ -99,16 +101,22 @@ def cmd_new():
         sys.exit(2)
 
     sid = next_sid(sroot)
-    user = safe(getenv("SUSER", "unknown"))
-    vec  = safe(getenv("SVEC",  "unknown"))
-    note = safe(getenv("SNOTE", ""))
+    box   = safe(getenv("BOX", ""))
+    user  = safe(getenv("SUSER", "unknown"))
+    vec   = safe(getenv("SVEC",  "unknown"))
     phase = safe(getenv("SPHASE", ""))
+    note  = safe(getenv("SNOTE", ""))
 
-    parts = [sid, ip, user, vec]
+    # dir name: sXX_<ip>[_BOX]_<user>_<vec>[_phase][_note]
+    parts = [sid, ip]
+    if box:
+        parts.append(box)
+    parts += [user, vec]
     if phase:
         parts.append(phase)
     if note:
         parts.append(note)
+
     dname = "_".join(parts)
     sdir = sroot / dname
     sdir.mkdir()
@@ -119,14 +127,14 @@ def cmd_new():
     meta = [
         f"SID: {sid}",
         f"IP: {ip}",
+        f"BOX: {getenv('BOX','')}",
         f"User: {getenv('SUSER','')}",
         f"Vector: {getenv('SVEC','')}",
+        f"Phase: {getenv('SPHASE','')}",
+        f"Note: {getenv('SNOTE','')}",
         f"Stability: {getenv('SSTAB','')}",
         f"LHOST: {getenv('SLHOST','')}",
         f"LPORT: {getenv('SPORT','4444')}",
-        f"Phase: {getenv('SPHASE','')}",
-        f"Note: {getenv('SNOTE','')}",  
-      
         f"Created: {time.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
         "Notes:",
@@ -137,7 +145,10 @@ def cmd_new():
     write_file(sdir / "proof.txt", "")
 
     idx = sroot / "index.txt"
-    line = f"{sid} | {ip} | {getenv('SUSER','')} | {getenv('SVEC','')} | {getenv('SPHASE','')} | {getenv('SNOTE','')} | {getenv('SSTAB','')}\n"
+    line = (
+        f"{sid} | {ip} | {getenv('BOX','')} | {getenv('SUSER','')} | {getenv('SVEC','')} | "
+        f"{getenv('SPHASE','')} | {getenv('SNOTE','')} | {getenv('SSTAB','')}\n"
+    )
     existing = idx.read_text(encoding="utf-8") if idx.exists() else ""
     idx.write_text(existing + line, encoding="utf-8")
 

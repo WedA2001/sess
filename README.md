@@ -17,7 +17,22 @@ source ~/.zshrc
 
 ## Usage
 ```bash 
+
+
+t     → target
+box   → machine
+ph    → stage
+s     → new session
+listen→ handler
+sls   → sessions
+scd   → interact
+
+
+---------
+
+
 t 192.168.222.202
+box WEB18
 s daemon apache_rce "cgi enabled"
 
 listen
@@ -30,4 +45,6 @@ note "try sudo -l + SUID hunt"
 
 s daemon lpe
 scd s01
+
+
 ```
